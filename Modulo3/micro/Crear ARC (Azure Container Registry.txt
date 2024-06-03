@@ -1,0 +1,88 @@
+Crear ARC (Azure Container Registry.)
+
+sudo az acr create --resource-group uao --name classificationimages --sku Basic
+
+
+Autenticarse en ARC
+az acr login --name classificationimages
+
+Etiquetar imagen de Docker generada
+sudo docker tag myapp:latest classificationimages.azurecr.io/myapp:latest
+
+Subir la imagen a ACR
+sudo docker push classificationimages.azurecr.io/myapp:latest
+
+
+
+ACR_NAME=classificationimages
+ACR_LOGIN_SERVER=$(az acr show --name $ACR_NAME --query loginServer --output tsv)
+
+
+!-- Importante ejecutar esta para habilitar la autenticación 
+az acr update -n classificationimages --admin-enabled true
+
+obtener credenciales de ACR
+ACR_USERNAME=$(az acr credential show --name $ACR_NAME --query username --output tsv)
+ACR_PASSWORD=$(az acr credential show --name $ACR_NAME --query passwords[0].value --output tsv)
+
+generar secreto
+
+kubectl create secret docker-registry acr-secret --docker-server=$ACR_LOGIN_SERVER --docker-username=$ACR_USERNAME --docker-password=$ACR_PASSWORD --docker-email=<your-email>
+
+
+
+
+----------- deploment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+      - name: myapp
+        image: classificationimages.azurecr.io/myapp:latest
+        ports:
+        - containerPort: 5000
+      imagePullSecrets:
+      - name: acr-secret
+
+------
+
+------ Archivo service.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-service
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 5000
+  selector:
+    app: myapp
+--------
+
+
+
+subir cambios del archivo deployment.yaml
+sudo kubectl apply -f deployment.yaml
+sudo kubectl apply -f service.yaml
+
+
+obtener ip del services
+sudo kubectl get services
+
+-- Se consume con la ip-external
+
+
+
